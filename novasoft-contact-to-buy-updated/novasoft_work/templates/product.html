@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} — {{ store_name }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('home') }}">Store</a><span>/</span><span>{{ product.name }}</span></div>
+<section class="product-detail">
+  <div class="detail-art">
+    {% if product.image_url %}<img src="{{ product.image_url }}" alt="{{ product.name }}">{% else %}<div class="detail-orb"><span>{{ product.name[:1]|upper }}</span></div>{% endif %}
+    <div class="detail-art-caption"><span class="pulse-dot"></span> DIGITAL PRODUCT</div>
+  </div>
+  <div class="detail-copy">
+    <div class="eyebrow">{{ product.category }} <span class="eyebrow-divider">/</span> Version {{ product.version }}</div>
+    <h1>{{ product.name }}</h1><p class="detail-description">{{ product.description }}</p>
+    <div class="detail-price">{{ product.price_paise|money }} {% if product.compare_price_paise > product.price_paise %}<del>{{ product.compare_price_paise|money }}</del>{% endif %}</div>
+    {% if product.preview_key %}<section class="product-preview"><h2>Preview this product</h2>{% if product.preview_type == 'pdf' %}<iframe src="{{ url_for('product_preview', product_id=product.id) }}" title="{{ product.name }} PDF preview" loading="lazy" style="width:100%;height:520px;border:1px solid #333c5c;border-radius:12px;background:#fff"></iframe>{% else %}<video controls preload="metadata" style="width:100%;max-height:520px;border-radius:12px;background:#05070d"><source src="{{ url_for('product_preview', product_id=product.id) }}">Your browser does not support this video.</video>{% endif %}<p class="helper-text">Want to purchase this product? Contact us below.</p></section>{% endif %}
+    <div class="secure-note"><span>✉</span><span><b>Talk to us before buying</b><small>Contact us to ask questions, confirm compatibility, and arrange your purchase.</small></span></div>
+    {% set mail_subject = ('Purchase enquiry: ' ~ product.name) %}
+    {% set mail_body = ('Hello ' ~ store_name ~ ', I am interested in ' ~ product.name ~ '. Listed price: ' ~ (product.price_paise|money) ~ '. Product page: ' ~ request.url ~ '. Please share the next steps to purchase. Thank you.') %}
+    <div class="hero-actions contact-actions">
+      <a class="btn btn-primary btn-wide" href="mailto:{{ contact_email }}?subject={{ mail_subject|urlencode }}&body={{ mail_body|urlencode }}">Email to enquire ↗</a>
+      <a class="btn btn-ghost btn-wide" href="tel:{{ contact_phone|replace(' ', '')|replace('-', '')|replace('(', '')|replace(')', '') }}">Call us ↗</a>
+    </div>
+    <div class="checkout-foot">No online payment is taken on this website. We will respond to your enquiry and explain the purchase and payment options directly.</div>
+    <p class="form-message">Contact email: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a><br>Phone: <a href="tel:{{ contact_phone|replace(' ', '')|replace('-', '')|replace('(', '')|replace(')', '') }}">{{ contact_phone }}</a></p>
+  </div>
+</section>
+{% endblock %}

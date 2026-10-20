@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <div class="eyebrow"><span class="pulse-dot"></span> THE NEXT GENERATION OF DIGITAL TOOLS</div>
+    <h1>Power your ideas.<br><span class="gradient-text">Upgrade your world.</span></h1>
+    <p class="hero-sub">Discover carefully crafted software and digital products built to make your next big thing happen.</p>
+    <div class="hero-actions"><a class="btn btn-primary" href="#products">Explore products <span>↗</span></a><a class="btn btn-ghost" href="#about">Discover NovaSoft</a></div>
+    <div class="hero-proof"><div class="proof-avatars"><span>N</span><span>+</span><span>∞</span></div><span>Digital possibilities, without limits.</span></div>
+  </div>
+  <div class="hero-visual" aria-label="Abstract 3D glowing NovaSoft emblem">
+    <div class="orbit orbit-a"></div><div class="orbit orbit-b"></div>
+    <div class="hero-cube"><div class="cube-face cube-front">N<span>SOFT</span></div><div class="cube-glow"></div></div>
+    <div class="float-chip chip-one"><span class="chip-icon">✦</span><span><b>Built for creators</b><small>Tools that move you forward</small></span></div>
+    <div class="float-chip chip-two"><span class="chip-check">✓</span><span><b>Personal support</b><small>Direct help from our team</small></span></div>
+  </div>
+  <div class="hero-grid"></div>
+</section>
+<section class="trust-strip"><span>SOFTWARE</span><i></i><span>DIGITAL ASSETS</span><i></i><span>CREATOR TOOLS</span><i></i><span>BUILT FOR TOMORROW</span></section>
+<section class="section" id="products">
+  <div class="section-heading"><div><div class="eyebrow">THE COLLECTION</div><h2>Tools for your <span class="gradient-text">next move.</span></h2></div><p>Find the right tool, then contact us to discuss how to purchase it.</p></div>
+  {% if products %}
+  <div class="product-grid">
+    {% for product in products %}
+    <article class="product-card tilt-card">
+      <a href="{{ url_for('product_detail', slug=product.slug) }}" class="product-art">
+        {% if product.image_url %}<img src="{{ product.image_url }}" alt="" loading="lazy">{% else %}<div class="art-orb"><span>{{ product.name[:1]|upper }}</span></div><div class="art-lines"></div>{% endif %}
+        <span class="product-category">{{ product.category }}</span><span class="art-arrow">↗</span>
+      </a>
+      <div class="product-info"><div class="product-version">VERSION {{ product.version }}</div><h3><a href="{{ url_for('product_detail', slug=product.slug) }}">{{ product.name }}</a></h3><p>{{ product.description|truncate(125) }}</p>
+        <div class="product-bottom"><div class="price">{{ product.price_paise|money }} {% if product.compare_price_paise > product.price_paise %}<del>{{ product.compare_price_paise|money }}</del>{% endif %}</div><a class="round-link" href="{{ url_for('product_detail', slug=product.slug) }}" aria-label="View {{ product.name }}">↗</a></div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state"><div class="empty-icon">✳</div><h3>Your next favourite tool starts here.</h3><p>The store is ready. Sign in to the admin panel and add your first product.</p><a class="btn btn-primary" href="{{ url_for('admin_login') }}">Open admin panel ↗</a></div>
+  {% endif %}
+</section>
+<section class="feature-banner" id="about"><div class="feature-glow"></div><div class="eyebrow">SIMPLE. SECURE. DIGITAL.</div><h2>Questions before you buy?<br><span class="gradient-text">Talk to a real person.</span></h2><p>Choose a product, email us or call, and we will respond with details and the next steps to purchase.</p><div class="hero-actions"><a href="mailto:{{ contact_email }}" class="btn btn-primary">Email us ↗</a><a href="tel:{{ contact_phone|replace(' ', '')|replace('-', '') }}" class="btn btn-ghost">Call us ↗</a></div></section>
+{% endblock %}

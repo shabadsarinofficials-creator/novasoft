@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}{{ error.code }} — NovaSoft{% endblock %}
+{% block content %}
+<section class="error-page"><div class="eyebrow">SOMETHING DIDN’T GO AS PLANNED</div><h1>{{ error.code }}<span class="gradient-text">.</span></h1><p>{{ error.description or 'This page could not be found.' }}</p><a class="btn btn-primary" href="{{ url_for('home') }}">Back to storefront ↗</a></section>
+{% endblock %}

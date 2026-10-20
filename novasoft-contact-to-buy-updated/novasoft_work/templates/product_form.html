@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit product' if product else 'Add product' }} — NovaSoft{% endblock %}
+{% block content %}
+<section class="form-page"><div class="breadcrumbs"><a href="{{ url_for('admin_dashboard') }}">Dashboard</a><span>/</span><span>{{ 'Edit product' if product else 'Add product' }}</span></div>
+<div class="form-heading"><div class="eyebrow">CATALOGUE MANAGEMENT</div><h1>{{ 'Edit your product.' if product else 'Launch something great.' }}</h1><p>Product files are stored privately and delivered only to verified buyers.</p></div>
+<form method="post" enctype="multipart/form-data" class="product-editor">
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<div class="editor-main">
+<div class="editor-panel"><h3>Product details</h3>
+<label for="name">Product name</label><input id="name" name="name" maxlength="160" required value="{{ product.name if product else '' }}" placeholder="e.g. Nova Code Toolkit">
+<label for="description">Description</label><textarea id="description" name="description" rows="6" required placeholder="What does this product do?">{{ product.description if product else '' }}</textarea>
+<div class="field-row"><div><label for="category">Category</label><input id="category" name="category" maxlength="80" value="{{ product.category if product else 'Software' }}"></div><div><label for="version">Version</label><input id="version" name="version" maxlength="40" value="{{ product.version if product else '1.0.0' }}"></div></div>
+<label for="image_url">Product image URL (optional)</label><input id="image_url" name="image_url" type="url" maxlength="500" value="{{ product.image_url if product else '' }}" placeholder="https://example.com/image.webp">
+</div>
+<div class="editor-panel"><h3>Pricing</h3><div class="field-row"><div><label for="price">Selling price (INR)</label><input id="price" name="price" type="number" min="0" step="0.01" required value="{{ '%.2f'|format(product.price_paise / 100) if product else '199.00' }}"></div><div><label for="compare_price">Original price (INR)</label><input id="compare_price" name="compare_price" type="number" min="0" step="0.01" value="{{ '%.2f'|format(product.compare_price_paise / 100) if product else '' }}" placeholder="Optional"></div></div><p class="helper-text">This is the listed price only. Customers contact you directly to discuss and arrange purchase.</p></div>
+<div class="editor-panel"><h3>Customer preview (PDF or video)</h3>
+<label for="preview_file">Upload/replace customer preview</label><input id="preview_file" name="preview_file" type="file" accept=".pdf,.mp4,.webm,.mov"><p class="helper-text">PDF, MP4, WEBM or MOV. Customers can view this on the product page before contacting you. Current preview: {{ product.preview_filename if product and product.preview_filename else 'None' }}.</p>{% if product and product.preview_key %}<label class="toggle-row"><input type="checkbox" name="remove_preview"><span><b>Remove current preview</b><small>Remove the PDF/video from the public product page.</small></span></label>{% endif %}</div>
+<div class="editor-panel"><h3>Software file</h3>
+<label for="file">{{ 'Replace product file (optional)' if product else 'Choose software file or ZIP archive (optional with preview)' }}</label>
+<input id="file" name="file" type="file" accept=".zip,.7z,.rar,.pdf,.exe,.msi,.msix,.appx,.whl,.py,.txt,.md,.png,.jpg,.jpeg,.webp,.mp4,.mp3,.tar,.gz,.json,.csv,.docx,.xlsx,.pptx">
+<label for="folder_files" style="margin-top:1rem">{{ 'Or replace with a folder (optional)' if product else 'Or choose a folder to package as ZIP' }}</label>
+<input id="folder_files" name="folder_files" type="file" webkitdirectory directory multiple>
+<p class="helper-text">Current file: {{ product.original_filename if product else 'No file selected' }}. Choose either a single file/ZIP or a folder, not both. A PDF/video preview is separate. Folders are packaged as ZIP archives and preserve subfolders. Maximum total request size is controlled by MAX_UPLOAD_MB.</p>
+</div>
+</div>
+<aside class="editor-side"><div class="editor-panel publish-panel"><h3>Store visibility</h3><label class="toggle-row"><input type="checkbox" name="published" {% if not product or product.published %}checked{% endif %}><span><b>Publish product</b><small>Visible to customers in the storefront.</small></span></label><button class="btn btn-primary btn-wide" type="submit">{{ 'Save changes' if product else 'Create product' }} ↗</button><a class="back-link" href="{{ url_for('admin_dashboard') }}">Cancel</a></div></aside>
+</form></section>
+{% endblock %}
