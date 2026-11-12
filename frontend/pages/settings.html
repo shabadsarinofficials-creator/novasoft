@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings · BizSuite</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand"><h1>BizSuite</h1><span>NovaSoft</span></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="nav-icon">▣</span> Dashboard</a>
+        <a href="/pages/tasks.html"><span class="nav-icon">☑</span> Tasks</a>
+        <a href="/pages/projects.html"><span class="nav-icon">◈</span> Projects</a>
+        <a href="/pages/team.html"><span class="nav-icon">👤</span> Team</a>
+        <a href="/pages/announcements.html"><span class="nav-icon">📢</span> Announcements</a>
+        <a href="/pages/chat.html"><span class="nav-icon">💬</span> Chat</a>
+        <a href="/pages/files.html"><span class="nav-icon">📁</span> Files</a>
+        <a href="/pages/settings.html" class="active"><span class="nav-icon">⚙</span> Settings</a>
+      </nav>
+      <div class="sidebar-footer"><button class="btn btn-ghost btn-sm" onclick="API.logout()" style="color:#94a3b8">Sign out</button></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+          <h2>Settings</h2>
+        </div>
+        <div class="topbar-actions"><div class="user-chip" id="userChip"></div></div>
+      </header>
+      <div class="content">
+        <div class="card" style="max-width:480px;margin-bottom:1.5rem">
+          <div class="card-title">Change password</div>
+          <form id="pwForm">
+            <div class="form-group"><label>Current password</label><input type="password" class="form-control" id="current" required /></div>
+            <div class="form-group"><label>New password</label><input type="password" class="form-control" id="newpw" required minlength="8" /></div>
+            <button type="submit" class="btn btn-primary">Update password</button>
+          </form>
+        </div>
+        <div class="card" id="wsSettings" style="max-width:480px;display:none">
+          <div class="card-title">Workspace settings (admin)</div>
+          <div id="settingsList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error("auth");
+    (async () => {
+      const user = await loadCurrentUser();
+      if (user?.role === "admin") {
+        document.getElementById("wsSettings").style.display = "";
+        const settings = await API.get("/api/settings");
+        document.getElementById("settingsList").innerHTML = settings.map(s => `
+          <div class="form-group">
+            <label>${s.key}</label>
+            <div style="display:flex;gap:0.5rem">
+              <input class="form-control" id="set_${s.key}" value="${s.value || ""}" />
+              <button class="btn btn-secondary btn-sm" onclick="saveSetting('${s.key}')">Save</button>
+            </div>
+          </div>
+        `).join("");
+      }
+    })();
+    document.getElementById("pwForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await API.post("/api/auth/change-password", {
+          current_password: document.getElementById("current").value,
+          new_password: document.getElementById("newpw").value,
+        });
+        toast("Password updated", "success");
+        e.target.reset();
+      } catch (ex) { toast(ex.message, "error"); }
+    });
+    async function saveSetting(key) {
+      try {
+        await API.put(`/api/settings/${key}`, { value: document.getElementById("set_" + key).value });
+        toast("Saved", "success");
+      } catch (e) { toast(e.message, "error"); }
+    }
+  </script>
+</body>
+</html>
