@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Files · BizSuite</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand"><h1>BizSuite</h1><span>NovaSoft</span></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="nav-icon">▣</span> Dashboard</a>
+        <a href="/pages/tasks.html"><span class="nav-icon">☑</span> Tasks</a>
+        <a href="/pages/projects.html"><span class="nav-icon">◈</span> Projects</a>
+        <a href="/pages/team.html"><span class="nav-icon">👤</span> Team</a>
+        <a href="/pages/announcements.html"><span class="nav-icon">📢</span> Announcements</a>
+        <a href="/pages/chat.html"><span class="nav-icon">💬</span> Chat</a>
+        <a href="/pages/files.html" class="active"><span class="nav-icon">📁</span> Files</a>
+        <a href="/pages/settings.html"><span class="nav-icon">⚙</span> Settings</a>
+      </nav>
+      <div class="sidebar-footer"><button class="btn btn-ghost btn-sm" onclick="API.logout()" style="color:#94a3b8">Sign out</button></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+          <h2>Files</h2>
+        </div>
+        <div class="topbar-actions"><div class="user-chip" id="userChip"></div></div>
+      </header>
+      <div class="content">
+        <div class="toolbar">
+          <input type="file" id="fileInput" />
+          <button class="btn btn-primary" onclick="upload()">Upload</button>
+          <div class="spacer"></div>
+          <span style="font-size:0.8rem;color:var(--gray-500)">Max 20 MB · Allowed: documents & images</span>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Filename</th><th>Size</th><th>Uploader</th><th>Date</th><th></th></tr></thead>
+              <tbody id="body"><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <p style="margin-top:1rem;font-size:0.8rem;color:var(--gray-500)">
+          Note: On Render, local disk is ephemeral unless a persistent disk is attached. Configure object storage for production permanence.
+        </p>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error("auth");
+    async function init() { await loadCurrentUser(); load(); }
+    async function load() {
+      try {
+        const list = await API.get("/api/files");
+        const body = document.getElementById("body");
+        if (!list.length) { body.innerHTML = '<tr><td colspan="5" class="empty-state">No files</td></tr>'; return; }
+        body.innerHTML = list.map(f => `
+          <tr>
+            <td>${f.original_filename}</td>
+            <td>${(f.size_bytes / 1024).toFixed(1)} KB</td>
+            <td>${f.uploader?.name || "—"}</td>
+            <td>${formatDateTime(f.created_at)}</td>
+            <td><a class="btn btn-sm btn-secondary" href="/api/files/${f.id}/download" target="_blank">Download</a></td>
+          </tr>
+        `).join("");
+      } catch (e) { toast(e.message, "error"); }
+    }
+    async function upload() {
+      const input = document.getElementById("fileInput");
+      if (!input.files?.length) { toast("Choose a file", "error"); return; }
+      const form = new FormData();
+      form.append("file", input.files[0]);
+      try {
+        const token = API.getToken();
+        const res = await fetch("/api/files/upload", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token },
+          body: form,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Upload failed");
+        toast("Uploaded", "success");
+        input.value = "";
+        load();
+      } catch (e) { toast(e.message, "error"); }
+    }
+    init();
+  </script>
+</body>
+</html>
