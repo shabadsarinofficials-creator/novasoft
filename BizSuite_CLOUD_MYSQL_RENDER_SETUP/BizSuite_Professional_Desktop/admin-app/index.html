@@ -1,0 +1,155 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>BizSuite Admin</title>
+<style>
+:root{--ink:#14202b;--mute:#5b6b76;--line:#dbe3e9;--acc:#0b6e7f;--bg:#f1f5f8;--bad:#b3261e;--ok:#1b7a3a}
+*{box-sizing:border-box}body{margin:0;font:14px "Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+/* Ensure hidden login/dashboard panels stay hidden despite display:grid. */
+[hidden]{display:none !important}
+#login[hidden],#app[hidden]{display:none !important}
+input,select,button{font:inherit}input,select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+button{border:0;border-radius:6px;background:var(--acc);color:#fff;padding:8px 14px;cursor:pointer}button:hover{filter:brightness(1.1)}button:disabled{opacity:.6}
+:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+#login{min-height:100vh;display:grid;place-items:center}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:30px;width:340px}.card h1{margin:0 0 4px;font-size:22px}.card p{color:var(--mute);margin:0 0 12px}
+.card label{display:block;margin-top:12px;font-weight:600}.card input{width:100%;margin-top:6px}.card button{width:100%;margin-top:16px}
+#app{display:grid;grid-template-columns:200px 1fr;min-height:100vh}
+aside{background:#fff;border-right:1px solid var(--line);padding:18px 10px;display:flex;flex-direction:column;gap:4px}aside h2{margin:0 8px 14px;font-size:17px}
+aside button{background:none;color:var(--ink);text-align:left}aside button:hover{background:var(--bg)}aside button.on{background:var(--acc);color:#fff;font-weight:600}.sp{flex:1}pre.json{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fb;border:1px solid var(--line);padding:12px;border-radius:6px;margin:6px 0;max-width:100%}.muted{color:var(--mute)}
+main{padding:24px 28px;min-width:0}h2.t{margin:0 0 4px;font-size:20px}.hint{color:var(--mute);margin:0 0 14px}h3{margin:24px 0 4px}
+table{border-collapse:separate;border-spacing:0;background:#fff;width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th{background:#f7f9fb;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}td{padding:8px 12px;border-bottom:1px solid #eef2f5}tr:last-child td{border-bottom:0}
+td button{background:#e8eef2;color:var(--ink);padding:5px 10px}.row{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center}
+.bad{color:var(--bad)}.ok{color:var(--ok)}.note{background:#e6f4f1;border:1px solid #b9dcd5;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:center}
+.note code{background:#fff;padding:2px 8px;border-radius:4px;font-size:15px;user-select:all}.note button{margin-left:auto;background:#fff;color:var(--ink);border:1px solid var(--line)}
+#toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;padding:11px 16px;border-radius:8px;display:none;max-width:380px}#toast.show{display:block}#toast.bad{background:var(--bad);color:#fff}
+</style>
+<div id="login"><form class="card" onsubmit="signIn(event)"><h1>BizSuite Admin</h1><p>Sign in with your administrator account.</p>
+<label>Email<input id="e" type="email" required autofocus></label><label>Password<input id="p" type="password" required></label>
+<div id="le" class="bad" role="alert"></div><button id="go">Sign in</button></form></div>
+<div id="app" hidden><aside><h2>BizSuite</h2><button data-t="users">People</button><button data-t="work">Work overview</button><button data-t="reports">Reports &amp; backup</button><button data-t="search">Search</button><button data-t="access">Roles &amp; Access</button><button data-t="data">Data</button><button data-t="imp">Import</button><button data-t="audit">Audit log</button><div class="sp"></div><button onclick="location.reload()">Sign out</button></aside>
+<main><div id="note"></div><div id="m"></div></main></div><div id="toast" role="status"></div>
+<script>
+const API = window.bizsuiteConfig?.apiBase || localStorage.getItem("api") || "http://127.0.0.1:8000";
+let tok, roles = [], res = [], mapping = {}, page = 0, view = "users";
+const $ = id => document.getElementById(id), esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const toast = (m, bad) => { const t = $("toast"); t.textContent = m; t.className = "show" + (bad ? " bad" : ""); clearTimeout(toast.h); toast.h = setTimeout(() => t.className = "", 4500) };
+const note = h => $("note").innerHTML = h ? `<div class="note"><span>${h}</span><button onclick="note()">Dismiss</button></div>` : "";
+async function call(p, o = {}) { const h = { Authorization: "Bearer " + tok }; if (!(o.body instanceof FormData)) h["Content-Type"] = "application/json"; let r;
+  try { r = await fetch(API + p, { ...o, headers: h }) } catch { toast("Can't reach the company server. Check File → Configure server connection and make sure the shared server is running.", true); throw 0 }
+  const j = await r.json().catch(() => ({})); if (!r.ok) { const d = j.detail; toast(typeof d === "string" ? d : Array.isArray(d) ? d[0].msg : "Something went wrong (" + r.status + ")", true); throw 0 } return j }
+const J = (m, b) => ({ method: m, body: JSON.stringify(b) }), opts = (a, sel) => a.map(r => `<option value="${r.id}" ${r.id == sel ? "selected" : ""}>${esc(r.name)}</option>`).join("");
+async function signIn(ev) { ev.preventDefault(); $("go").disabled = true; $("le").textContent = "";
+  try { const r = await fetch(API + "/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: $("e").value.trim(), password: $("p").value }) });
+    const j = await r.json(); if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : "Could not sign in.");
+    if (j.role !== "admin") throw new Error("This account is not an administrator.");
+    tok = j.token; roles = await call("/admin/roles"); res = await call("/admin/resources"); $("login").hidden = true; $("app").hidden = false; show("users")
+  } catch (e) { $("le").textContent = e instanceof TypeError ? "Can't reach the company server. Check File → Configure server connection and make sure the shared server is running." : (e && e.message) || "Sign-in failed." } $("go").disabled = false }
+const head = (t, h) => `<h2 class="t">${t}</h2><p class="hint">${h}</p>`;
+const tabs = {
+  async users() { const q = $("q")?.value || ""; const u = await call(`/admin/users?q=${encodeURIComponent(q)}&page=${page}&size=50`);
+    $("m").innerHTML = head("People", "Everyone who can sign in to the employee app.") + `<div class="row"><input id="q" placeholder="Search name, email or department" size="34" value="${esc(q)}" onkeydown="if(event.key==='Enter'){page=0;show('users')}"><button onclick="page=0;show('users')">Search</button></div>
+    <div class="row"><input id="ne" placeholder="Email"><input id="nn" placeholder="Full name"><input id="nd" placeholder="Department"><select id="nr">${opts(roles.filter(r => r.name !== "admin"))}</select><button onclick="addUser()">Add person</button></div>
+    <table><tr><th>Name<th>Email<th>Department<th>Role<th>Active<th></tr>${u.map(x => `<tr><td>${esc(x.name)}<td>${esc(x.email)}<td>${esc(x.department)}<td><select onchange="edit(${x.id},{role_id:+this.value})">${opts(roles, x.role_id)}</select>
+    <td><input type="checkbox" ${x.active ? "checked" : ""} onchange="edit(${x.id},{active:this.checked})"><td><button onclick="resetPw(${x.id},'${esc(x.email)}')">Reset password</button> <button onclick="delUser(${x.id})">Remove</button>`).join("") || `<tr><td colspan=6>No people yet. Add one above or use Import.`}</table>
+    <div class="row"><button ${page ? "" : "disabled"} onclick="page--;show('users')">Previous</button><button ${u.length < 50 ? "disabled" : ""} onclick="page++;show('users')">Next</button></div>` },
+  async work() { const d = await call("/admin/work-overview");
+    const statuses = d.tasks.reduce((a,t)=>(a[t.status]=(a[t.status]||0)+1,a),{});
+    $("m").innerHTML = head("Work overview", "Read-only company-wide oversight. Admin can inspect tasks and messages but cannot assign work or send employee instructions.") +
+    `<div class="grid"><div class="card" style="width:auto"><b>${d.tasks.length}</b><p>Tasks tracked</p></div><div class="card" style="width:auto"><b>${statuses.submitted||0}</b><p>Awaiting review</p></div><div class="card" style="width:auto"><b>${d.messages.length}</b><p>Messages & notices</p></div></div><h3>All tasks</h3><table><tr><th>Task<th>Assigned to<th>Manager<th>Priority<th>Deadline<th>Status<th>Submissions & files<th>Task details</tr>${d.tasks.map(t=>`<tr><td>${esc(t.title)}<div class="muted">${esc(t.description)}</div><td>${esc(t.assignee_name)}<td>${esc(t.manager_name)}<td>${esc(t.priority)}<td>${esc(t.deadline||"—")}<td>${esc(t.status)}<td>${t.submission_url?`<a href="${esc(t.submission_url)}" target="_blank" rel="noopener">Open URL</a>`:""}${t.submission_name?` <button onclick="downloadAdminFile(${t.id},'download')">ZIP: ${esc(t.submission_name)}</button>`:""}${t.attachment_name?` <button onclick="downloadAdminFile(${t.id},'attachment')">File: ${esc(t.attachment_name)}</button>`:""}${!t.submission_url&&!t.submission_name&&!t.attachment_name?"—":""}<td><button onclick="adminTaskHistory(${t.id})">History</button> <button onclick="adminTaskComments(${t.id})">Comments</button> <button onclick="adminSubmissionVersions(${t.id})">Versions</button>`).join("")||`<tr><td colspan=8>No tasks yet.`}</table><h3>Messages and meetings (read-only)</h3><table><tr><th>Time<th>From<th>To<th>Type<th>Subject<th>Message<th>Acknowledgements</tr>${d.messages.map(x=>`<tr><td>${esc(String(x.created).replace("T"," ").slice(0,16))}<td>${esc(x.sender)}<td>${esc(x.recipient)}<td>${esc(x.kind)}<td>${esc(x.title)}<td>${esc(x.body)}${x.meeting_at?`<div class="muted">Scheduled: ${esc(x.meeting_at.replace("T"," ").slice(0,16))}</div>`:""}<td>${x.ack_required ? `Required (${x.ack_count||0} acknowledged)` : "Not required"}`).join("")||`<tr><td colspan=6>No messages yet.`}</table>` },
+  async access() { const g = await call("/admin/grants");
+    const people = await call("/admin/users?page=0&size=200");
+    const count = role => people.filter(p => roles.find(r => r.id === p.role_id)?.name === role && p.active).length;
+    const desc = {admin:"Full system control and company-wide visibility. Can manage accounts, configuration, data, and audit history. Cannot create assignments or send work messages.",manager:"Runs day-to-day work. Can add/deactivate employees, assign tasks, set priorities and deadlines, attach files, send messages/meeting notices, and review submissions.",employee:"Sees assigned tasks, updates progress, submits project URLs or ZIP files, and receives relevant messages. Cannot manage other users."};
+    $("m").innerHTML = head("Roles & permissions", "A simpler role model with fixed, understandable responsibilities. Change a person's role from People; task and messaging permissions are enforced by the API.") +
+    `<div class="grid">${["admin","manager","employee"].map(role=>`<div class="card" style="width:auto"><h3 style="margin:0 0 8px;text-transform:capitalize">${esc(role)}</h3><p><b>${count(role)}</b> active account(s)</p><p>${esc(desc[role])}</p><button onclick="view='users';show('users')">Manage accounts</button></div>`).join("")}</div>
+    <h3>How role permissions work</h3><table><tr><th>Capability<th>Admin<th>Manager<th>Employee</tr>
+    <tr><td>View company-wide work and messages<td>Yes, read-only<td>Team operations<td>Assigned work only</tr>
+    <tr><td>Create and assign tasks<td>No<td>Yes<td>No</tr>
+    <tr><td>Send direct messages / meetings<td>No<td>Yes<td>No</tr>
+    <tr><td>Add or deactivate employee accounts<td>Yes<td>Yes<td>No</tr>
+    <tr><td>Submit project URL / ZIP<td>Oversight only<td>Review team work<td>Own tasks</tr>
+    <tr><td>Change roles and system settings<td>Yes<td>No<td>No</tr></table>
+    <details style="margin-top:18px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px"><summary style="cursor:pointer;font-weight:700">Advanced dataset access (legacy resource permissions)</summary><p class="muted">Optional fine-grained access for the original Data workspace. These grants are separate from task management.</p>
+    <h3>Grant access</h3><div class="row"><select id="gr">${opts(roles)}</select><select id="gs">${opts(res)}</select><input id="gc" size="40" placeholder="Allowed IP ranges (blank = any network)"><button onclick="grant()">Save grant</button></div>
+    <table><tr><th>Role<th>Dataset / feature<th>Network<th></tr>${g.map(x=>`<tr><td>${esc(roles.find(r=>r.id==x.role_id)?.name)}<td>${esc(res.find(r=>r.id==x.resource_id)?.name)}<td>${esc(x.cidrs||"anywhere")}<td><button onclick="ungrant(${x.id})">Revoke</button>`).join("")||`<tr><td colspan=4>No advanced grants configured.`}</table>
+    <h3>Add a dataset / feature</h3><div class="row"><input id="sn" placeholder="Dataset name"><input id="sd" placeholder="Description"><button onclick="newRes()">Add dataset</button></div></details>` },
+  async data() {
+    const available = res.length ? `<div class="row"><label for="dr">Dataset</label><select id="dr" onchange="loadRecords()">${opts(res)}</select><button onclick="newRecord()">Add JSON record</button></div><div id="records"><p class="muted">Loading records…</p></div>` : `<p class="muted">Create a resource first under Roles &amp; Access, then return here to add records.</p>`;
+    $("m").innerHTML = head("Data", "Manage real JSON records stored in each dataset. Employees only see records when their role and network are permitted.") + available;
+    if (res.length) await loadRecords();
+  },
+  async imp() { mapping = {}; $("m").innerHTML = head("Import people", "CSV, TSV, Excel (.xlsx) or JSON. You will see a preview before anything is saved.") + `<div class="row"><input type="file" id="f" accept=".csv,.tsv,.txt,.xlsx,.xls,.json"><button onclick="preview()">Preview</button></div><div id="pv"></div>` },
+  async reports() { const d = await call("/admin/reports"); const ov = await call("/admin/work-overview");
+    const cell = v => { const x=String(v ?? ""); return /[",\r\n]/.test(x) ? '"'+x.replace(/"/g,'""')+'"' : x };
+    window.__bizsuiteTaskCsv = [["id","title","employee","manager","priority","deadline","status","submission_url","submission_file"], ...ov.tasks.map(t=>[t.id,t.title,t.assignee_name,t.manager_name,t.priority,t.deadline,t.status,t.submission_url,t.submission_name])].map(row=>row.map(cell).join(",")).join("\r\n");
+    $("m").innerHTML = head("Reports & backup", "Company-wide read-only reports. Admin can inspect and export work, but cannot assign tasks or send employee work messages.") +
+    `<div class="grid"><div class="card" style="width:auto"><b>${d.total_tasks}</b><p>Tasks tracked</p></div><div class="card" style="width:auto"><b>${d.overdue}</b><p>Overdue tasks</p></div><div class="card" style="width:auto"><b>${d.awaiting_review}</b><p>Awaiting review</p></div><div class="card" style="width:auto"><b>${d.active_users}</b><p>Active accounts</p></div></div><h3>Status breakdown</h3><table><tr><th>Status<th>Tasks</tr>${Object.entries(d.status_counts).map(([k,v])=>`<tr><td>${esc(k.replaceAll("_"," "))}<td>${v}</tr>`).join("")}</table><h3>Data protection</h3><p class="muted">Create a backup before upgrades or major data changes. Backup contains the database and uploaded work files.</p><div class="row"><button onclick="downloadBackup()">Download full backup ZIP</button><button onclick="exportAdminTasks()">Export task report CSV</button><button onclick="show('work')">Return to work overview</button></div><p class="muted">Store backups in a secure location. They contain company and employee information.</p>`;
+  },
+  async search() {
+    $("m").innerHTML = head("Company search", "Search authorized company accounts, tasks, and messages. Results are read-only.") + `<form id="adminSearchForm" class="row"><input id="adminSearchQuery" placeholder="Employee, task, project, message…" required><button>Search</button></form><div id="adminSearchResults"></div>`;
+    $("adminSearchForm").onsubmit = async ev => { ev.preventDefault(); const q=$("adminSearchQuery").value.trim(); const holder=$("adminSearchResults"); holder.innerHTML="<p class=muted>Searching…</p>"; try { const d=await call("/admin/search?q="+encodeURIComponent(q)); holder.innerHTML=`<h3>People (${d.users.length})</h3><table><tr><th>Name<th>Email<th>Department<th>Role<th>Active</tr>${d.users.map(x=>`<tr><td>${esc(x.name)}<td>${esc(x.email)}<td>${esc(x.department)}<td>${esc(x.role)}<td>${x.active?"Yes":"No"}</tr>`).join("")||"<tr><td colspan=5>No matching people</tr>"}</table><h3>Tasks (${d.tasks.length})</h3><table><tr><th>ID<th>Task<th>Employee<th>Status<th>Deadline</tr>${d.tasks.map(x=>`<tr><td>#${x.id}<td>${esc(x.title)}<td>${esc(x.assignee_name)}<td>${esc(x.status)}<td>${esc(x.deadline||"—")}</tr>`).join("")||"<tr><td colspan=5>No matching tasks</tr>"}</table><h3>Messages (${d.messages.length})</h3><table><tr><th>Subject<th>Type<th>Message<th>Created</tr>${d.messages.map(x=>`<tr><td>${esc(x.title)}<td>${esc(x.kind)}<td>${esc(x.body)}<td>${esc(x.created.replace("T"," ").slice(0,16))}</tr>`).join("")||"<tr><td colspan=4>No matching messages</tr>"}</table>`; } catch(e) { holder.innerHTML=`<p class=bad>Search failed. Check the API and try again.</p>`; } };
+  },
+  async audit() { const a = await call("/admin/audit"); $("m").innerHTML = head("Audit log", "The latest 200 admin actions, imports and denied requests.") + `<table><tr><th>Time<th>Who<th>Action<th>Detail<th>IP</tr>${a.map(x => `<tr><td>${esc(x.at.replace("T", " ").slice(0, 19))}<td>${esc(x.actor)}<td>${esc(x.action)}<td>${esc(x.detail)}<td>${esc(x.ip)}`).join("")}</table>` } };
+const show = t => { view = t; document.querySelectorAll("aside [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === t)); return tabs[t]().catch(() => {}) };
+document.querySelectorAll("aside [data-t]").forEach(b => b.onclick = () => { note(); show(b.dataset.t) });
+
+async function adminTaskHistory(id) { try { const rows=await call(`/work/tasks/${id}/history`); alert(rows.length ? rows.map(x=>`${x.created.replace("T"," ").slice(0,16)} — ${x.actor}: ${x.action}\n${x.detail}`).join("\n\n") : "No task history yet."); } catch(e) { toast("Could not load task history.",true); } }
+async function adminTaskComments(id) { try { const rows=await call(`/work/tasks/${id}/comments`); alert(rows.length ? rows.map(x=>`${x.created.replace("T"," ").slice(0,16)} — ${x.author} (${x.author_role})\n${x.body}`).join("\n\n") : "No comments yet."); } catch(e) { toast("Could not load task comments.",true); } }
+async function adminSubmissionVersions(id) { try { const rows=await call(`/work/tasks/${id}/submissions`); alert(rows.length ? rows.map(x=>`Version ${x.version} — ${x.user} — ${x.created.replace("T"," ").slice(0,16)}\n${x.file_name||"URL submission"}\n${x.submission_url||""}\n${x.note||""}`).join("\n\n") : "No submissions yet."); } catch(e) { toast("Could not load submission versions.",true); } }
+async function downloadBackup() { try { const r=await fetch(API+"/admin/backup",{headers:{Authorization:"Bearer "+tok}}); if(!r.ok){let j={};try{j=await r.json()}catch{} throw new Error(j.detail||"Backup download failed.")} const blob=await r.blob(),a=document.createElement("a"),u=URL.createObjectURL(blob);a.href=u;a.download="bizsuite-backup.zip";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);toast("Backup downloaded. Store it securely."); } catch(e) { toast(e.message||"Backup failed",true); } }
+function exportAdminTasks() { const rows=window.__bizsuiteTaskCsv; if(!rows)return toast("Open Reports & backup again and retry.",true); const a=document.createElement("a"),u=URL.createObjectURL(new Blob([rows],{type:"text/csv;charset=utf-8"}));a.href=u;a.download="bizsuite-task-report.csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000); }
+async function downloadAdminFile(id,kind) { try { const r=await fetch(API+`/work/tasks/${id}/${kind}`,{headers:{Authorization:"Bearer "+tok}}); if(!r.ok) throw new Error("Could not download file."); const blob=await r.blob(),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=kind==="download"?"submission.zip":"attachment";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000); } catch(e) { toast(e.message||"Download failed",true); } }
+async function loadRecords() {
+  const holder = $("records"); if (!holder) return;
+  const rid = Number($("dr")?.value); if (!rid) { holder.innerHTML = `<p class="muted">Choose a dataset.</p>`; return; }
+  try {
+    const rows = await call(`/admin/resources/${rid}/records`);
+    holder.innerHTML = rows.length ? `<table><tr><th style="width:90px">Record</th><th>JSON data</th><th style="width:110px">Created</th><th style="width:90px">Action</th></tr>${rows.map(x => `<tr><td>#${x.id}</td><td><pre class="json">${esc(JSON.stringify(x.data, null, 2))}</pre></td><td>${esc(String(x.created).replace("T", " ").slice(0, 19))}</td><td><button onclick="removeRecord(${rid},${x.id})">Delete</button></td></tr>`).join("")}</table>` : `<p class="muted">No records yet. Click “Add JSON record” to create the first one.</p>`;
+  } catch (e) { holder.innerHTML = `<p class="bad">Could not load this dataset.</p>`; }
+}
+async function newRecord() {
+  const rid = Number($("dr")?.value); if (!rid) return;
+  const raw = prompt('Enter a JSON object for this record:', `{
+  "name": "Example",
+  "status": "active"
+}`);
+  if (raw === null) return;
+  let data;
+  try { data = JSON.parse(raw); } catch { return toast("That is not valid JSON.", true); }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return toast("Enter a JSON object, not a list or value.", true);
+  await call(`/admin/resources/${rid}/records`, J("POST", { data })); toast("Record added"); await loadRecords();
+}
+async function removeRecord(rid, id) {
+  if (!confirm(`Delete record #${id}? This cannot be undone.`)) return;
+  await call(`/admin/resources/${rid}/records/${id}`, { method: "DELETE" }); toast("Record deleted"); await loadRecords();
+}
+
+const addUser = async () => { const email = $("ne").value.trim(); const r = await call("/admin/users", J("POST", { email, name: $("nn").value.trim(), department: $("nd").value.trim(), role_id: +$("nr").value }));
+  note(`Added ${esc(email)}. Temporary password: <code>${esc(r.temp_password)}</code> Give it to them now. It is shown only once.`); toast("Person added"); show("users") };
+const edit = async (id, b) => { await call("/admin/users/" + id, J("PATCH", b)); toast("Saved") };
+const delUser = async id => { if (confirm("Remove this person for good?")) { await call("/admin/users/" + id, { method: "DELETE" }); toast("Removed"); show("users") } };
+const resetPw = async (id, email) => { const r = await call("/admin/users/" + id + "/reset-password", { method: "POST" }); note(`New password for ${esc(email)}: <code>${esc(r.temp_password)}</code> Give it to the employee now. It is shown only once.`) };
+const grant = async () => { await call("/admin/grants", J("PUT", { role_id: +$("gr").value, resource_id: +$("gs").value, cidrs: $("gc").value })); toast("Access saved"); show("access") };
+const ungrant = async id => { await call("/admin/grants/" + id, { method: "DELETE" }); toast("Access revoked"); show("access") };
+const newRole = async () => { await call("/admin/roles", J("POST", { name: $("rn").value.trim() })); roles = await call("/admin/roles"); toast("Role added"); show("access") };
+const newRes = async () => { await call("/admin/resources", J("POST", { name: $("sn").value.trim(), description: $("sd").value.trim() })); res = await call("/admin/resources"); toast("Added"); show("access") };
+async function preview() { if (!$("f").files[0]) return toast("Choose a file first.", true); const fd = new FormData(); fd.append("file", $("f").files[0]); if (Object.keys(mapping).length) fd.append("mapping", JSON.stringify(mapping));
+  const p = await call("/admin/import/preview", { method: "POST", body: fd }).catch(() => null); if (!p) return; mapping = p.mapping;
+  $("pv").innerHTML = `<h3>1. Match your columns</h3><div class="row">${["email", "name", "department"].map(k => `${k}: <select onchange="mapping['${k}']=this.value||null;preview()"><option value="">(none)</option>${p.columns.map(c => `<option ${mapping[k] == c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`).join(" ")}</div>
+  <h3>2. Check the result</h3><p><span class="ok">${p.valid} ready to import</span> of ${p.total} rows. <span class="bad">${p.errors.length} skipped</span></p>
+  ${p.errors.length ? `<table><tr><th>Row<th>Email<th>Problem</tr>${p.errors.map(e => `<tr><td>${e.row}<td>${esc(e.email)}<td class="bad">${esc(e.error)}`).join("")}</table>` : ""}
+  <h3>3. Import</h3><div class="row">Role for these people: <select id="ir">${opts(roles.filter(r => r.name !== "admin"))}</select><button onclick="commit()" ${p.valid ? "" : "disabled"}>Import ${p.valid} people</button></div>` }
+const csvCell = value => { const s = String(value ?? ""); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s };
+async function commit() { const fd = new FormData(); fd.append("file", $("f").files[0]); fd.append("mapping", JSON.stringify(mapping)); fd.append("role_id", $("ir").value);
+  const r = await call("/admin/import/commit", { method: "POST", body: fd }); const csv = "email,name,temp_password\r\n" + r.credentials.map(c => [c.email, c.name, c.temp_password].map(csvCell).join(",")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "new-employee-passwords.csv"; a.click();
+  $("pv").innerHTML = ""; note(`Imported ${r.created} people, skipped ${r.skipped}. A file called new-employee-passwords.csv was downloaded. Hand out the passwords, then delete it.`) }
+
+// Keep read-only company overview current when other users change work.
+setInterval(() => {
+  if (!tok || document.visibilityState !== "visible") return;
+  if (!["work", "reports", "audit"].includes(view)) return;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  show(view);
+}, 30000);
+</script></html>
