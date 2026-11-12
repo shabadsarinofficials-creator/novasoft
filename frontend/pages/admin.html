@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin · BizSuite</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand"><h1>BizSuite</h1><span>NovaSoft</span></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="nav-icon">▣</span> Dashboard</a>
+        <a href="/pages/tasks.html"><span class="nav-icon">☑</span> Tasks</a>
+        <a href="/pages/projects.html"><span class="nav-icon">◈</span> Projects</a>
+        <a href="/pages/team.html"><span class="nav-icon">👤</span> Team</a>
+        <a href="/pages/announcements.html"><span class="nav-icon">📢</span> Announcements</a>
+        <a href="/pages/chat.html"><span class="nav-icon">💬</span> Chat</a>
+        <a href="/pages/files.html"><span class="nav-icon">📁</span> Files</a>
+        <a href="/pages/settings.html"><span class="nav-icon">⚙</span> Settings</a>
+        <a href="/pages/admin.html" class="active"><span class="nav-icon">🛡</span> Admin</a>
+      </nav>
+      <div class="sidebar-footer"><button class="btn btn-ghost btn-sm" onclick="API.logout()" style="color:#94a3b8">Sign out</button></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+          <h2>Administrator · Audit Logs</h2>
+        </div>
+        <div class="topbar-actions"><div class="user-chip" id="userChip"></div></div>
+      </header>
+      <div class="content">
+        <div class="card">
+          <div class="card-title">Recent audit activity</div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>OK</th></tr></thead>
+              <tbody id="body"><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/config.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error("auth");
+    (async () => {
+      const user = await loadCurrentUser();
+      if (user?.role !== "admin") {
+        toast("Admin only", "error");
+        setTimeout(() => location.href = "/dashboard", 1000);
+        return;
+      }
+      try {
+        const logs = await API.get("/api/audit?limit=100");
+        const body = document.getElementById("body");
+        if (!logs.length) { body.innerHTML = '<tr><td colspan="5" class="empty-state">No audit entries</td></tr>'; return; }
+        body.innerHTML = logs.map(l => `
+          <tr>
+            <td>${formatDateTime(l.created_at)}</td>
+            <td>${l.actor?.name || "—"}</td>
+            <td>${l.action}</td>
+            <td>${l.target_type || ""}${l.target_id ? " #" + l.target_id : ""}</td>
+            <td>${l.success ? "✓" : "✗"}</td>
+          </tr>
+        `).join("");
+      } catch (e) { toast(e.message, "error"); }
+    })();
+  </script>
+</body>
+</html>

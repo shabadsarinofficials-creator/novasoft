@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Announcements · BizSuite</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand"><h1>BizSuite</h1><span>NovaSoft</span></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="nav-icon">▣</span> Dashboard</a>
+        <a href="/pages/tasks.html"><span class="nav-icon">☑</span> Tasks</a>
+        <a href="/pages/projects.html"><span class="nav-icon">◈</span> Projects</a>
+        <a href="/pages/team.html"><span class="nav-icon">👤</span> Team</a>
+        <a href="/pages/announcements.html" class="active"><span class="nav-icon">📢</span> Announcements</a>
+        <a href="/pages/chat.html"><span class="nav-icon">💬</span> Chat</a>
+        <a href="/pages/files.html"><span class="nav-icon">📁</span> Files</a>
+        <a href="/pages/settings.html"><span class="nav-icon">⚙</span> Settings</a>
+      </nav>
+      <div class="sidebar-footer"><button class="btn btn-ghost btn-sm" onclick="API.logout()" style="color:#94a3b8">Sign out</button></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+          <h2>Announcements</h2>
+        </div>
+        <div class="topbar-actions"><div class="user-chip" id="userChip"></div></div>
+      </header>
+      <div class="content">
+        <div class="toolbar">
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="btnNew" style="display:none" onclick="openModal()">+ Post announcement</button>
+        </div>
+        <div id="list" class="loading">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <div class="modal-header"><h3>New announcement</h3><button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button></div>
+      <form id="form">
+        <div class="modal-body">
+          <div class="form-group"><label>Title</label><input class="form-control" id="title" required /></div>
+          <div class="form-group"><label>Body</label><textarea class="form-control" id="body" required></textarea></div>
+          <div class="form-group">
+            <label>Audience</label>
+            <select class="form-control" id="audience">
+              <option value="all">Everyone</option>
+              <option value="admin">Admins</option>
+              <option value="manager">Managers</option>
+              <option value="employee">Employees</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Publish</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/config.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error("auth");
+    async function init() {
+      const u = await loadCurrentUser();
+      if (u?.role === "admin" || u?.role === "manager") document.getElementById("btnNew").style.display = "";
+      load();
+    }
+    async function load() {
+      try {
+        const list = await API.get("/api/announcements");
+        const el = document.getElementById("list");
+        if (!list.length) { el.innerHTML = '<div class="card empty-state">No announcements</div>'; return; }
+        el.innerHTML = list.map(a => `
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <strong style="font-size:1.05rem">${a.title}</strong>
+                <div style="font-size:0.8rem;color:var(--gray-500);margin:0.35rem 0">${a.creator?.name || ""} · ${formatDateTime(a.created_at)} · ${a.target_audience}</div>
+              </div>
+            </div>
+            <p style="margin-top:0.5rem;white-space:pre-wrap">${a.body}</p>
+          </div>
+        `).join("");
+      } catch (e) { toast(e.message, "error"); }
+    }
+    function openModal() { document.getElementById("modal").classList.add("open"); }
+    function closeModal() { document.getElementById("modal").classList.remove("open"); }
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await API.post("/api/announcements", {
+          title: document.getElementById("title").value.trim(),
+          body: document.getElementById("body").value.trim(),
+          target_audience: document.getElementById("audience").value,
+        });
+        closeModal(); toast("Published", "success"); load();
+      } catch (ex) { toast(ex.message, "error"); }
+    });
+    init();
+  </script>
+</body>
+</html>

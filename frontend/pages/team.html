@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Team · BizSuite</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand"><h1>BizSuite</h1><span>NovaSoft</span></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="nav-icon">▣</span> Dashboard</a>
+        <a href="/pages/tasks.html"><span class="nav-icon">☑</span> Tasks</a>
+        <a href="/pages/projects.html"><span class="nav-icon">◈</span> Projects</a>
+        <a href="/pages/team.html" class="active"><span class="nav-icon">👤</span> Team</a>
+        <a href="/pages/announcements.html"><span class="nav-icon">📢</span> Announcements</a>
+        <a href="/pages/chat.html"><span class="nav-icon">💬</span> Chat</a>
+        <a href="/pages/files.html"><span class="nav-icon">📁</span> Files</a>
+        <a href="/pages/settings.html"><span class="nav-icon">⚙</span> Settings</a>
+      </nav>
+      <div class="sidebar-footer"><button class="btn btn-ghost btn-sm" onclick="API.logout()" style="color:#94a3b8">Sign out</button></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+          <h2>Team</h2>
+        </div>
+        <div class="topbar-actions"><div class="user-chip" id="userChip"></div></div>
+      </header>
+      <div class="content">
+        <div class="toolbar">
+          <input class="form-control search-input" id="search" placeholder="Search people…" />
+          <select class="form-control" id="roleFilter" style="max-width:140px">
+            <option value="">All roles</option>
+            <option value="admin">Admin</option>
+            <option value="manager">Manager</option>
+            <option value="employee">Employee</option>
+          </select>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="btnNew" style="display:none" onclick="openModal()">+ Add user</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th></th></tr></thead>
+              <tbody id="body"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <div class="modal-header"><h3>Add user</h3><button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button></div>
+      <form id="form">
+        <div class="modal-body">
+          <div class="form-group"><label>Name</label><input class="form-control" id="name" required /></div>
+          <div class="form-group"><label>Email</label><input type="email" class="form-control" id="email" required /></div>
+          <div class="form-group"><label>Password</label><input type="password" class="form-control" id="password" required minlength="8" /></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Role</label>
+              <select class="form-control" id="role">
+                <option value="employee">Employee</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Department</label><input class="form-control" id="department" /></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/config.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error("auth");
+    async function init() {
+      const user = await loadCurrentUser();
+      if (user?.role === "admin") document.getElementById("btnNew").style.display = "";
+      load();
+    }
+    async function load() {
+      const params = new URLSearchParams();
+      const q = document.getElementById("search").value.trim();
+      const role = document.getElementById("roleFilter").value;
+      if (q) params.set("q", q);
+      if (role) params.set("role", role);
+      try {
+        const list = await API.get("/api/users?" + params);
+        const body = document.getElementById("body");
+        if (!list.length) { body.innerHTML = '<tr><td colspan="6" class="empty-state">No users</td></tr>'; return; }
+        const isAdmin = window.currentUser?.role === "admin";
+        body.innerHTML = list.map(u => `
+          <tr>
+            <td><strong>${u.name}</strong></td>
+            <td>${u.email}</td>
+            <td>${roleBadge(u.role)}</td>
+            <td>${u.department || "—"}</td>
+            <td><span class="badge badge-${u.is_active ? "active" : "inactive"}">${u.is_active ? "Active" : "Inactive"}</span></td>
+            <td>${isAdmin && u.id !== window.currentUser.id ? `
+              <button class="btn btn-sm btn-secondary" onclick="toggleActive(${u.id}, ${u.is_active})">${u.is_active ? "Deactivate" : "Reactivate"}</button>
+            ` : ""}</td>
+          </tr>
+        `).join("");
+      } catch (e) { toast(e.message, "error"); }
+    }
+    async function toggleActive(id, isActive) {
+      if (!confirm(isActive ? "Deactivate this user?" : "Reactivate this user?")) return;
+      try {
+        await API.post(`/api/users/${id}/${isActive ? "deactivate" : "reactivate"}`);
+        toast("Updated", "success"); load();
+      } catch (e) { toast(e.message, "error"); }
+    }
+    function openModal() { document.getElementById("modal").classList.add("open"); }
+    function closeModal() { document.getElementById("modal").classList.remove("open"); }
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await API.post("/api/users", {
+          name: document.getElementById("name").value.trim(),
+          email: document.getElementById("email").value.trim(),
+          password: document.getElementById("password").value,
+          role: document.getElementById("role").value,
+          department: document.getElementById("department").value.trim() || null,
+        });
+        closeModal(); toast("User created", "success"); load();
+      } catch (ex) { toast(ex.message, "error"); }
+    });
+    document.getElementById("search").addEventListener("input", () => { clearTimeout(window._t); window._t = setTimeout(load, 300); });
+    document.getElementById("roleFilter").addEventListener("change", load);
+    init();
+  </script>
+</body>
+</html>

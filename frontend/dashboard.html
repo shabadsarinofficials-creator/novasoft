@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard · BizSuite</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <h1>BizSuite</h1>
+        <span>NovaSoft</span>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard" class="active"><span class="nav-icon">▣</span> Dashboard</a>
+        <a href="/pages/tasks.html"><span class="nav-icon">☑</span> Tasks</a>
+        <a href="/pages/projects.html"><span class="nav-icon">◈</span> Projects</a>
+        <a href="/pages/team.html"><span class="nav-icon">👤</span> Team</a>
+        <a href="/pages/announcements.html"><span class="nav-icon">📢</span> Announcements</a>
+        <a href="/pages/chat.html"><span class="nav-icon">💬</span> Chat</a>
+        <a href="/pages/files.html"><span class="nav-icon">📁</span> Files</a>
+        <a href="/pages/settings.html"><span class="nav-icon">⚙</span> Settings</a>
+        <a href="/pages/admin.html" id="navAdmin" style="display:none"><span class="nav-icon">🛡</span> Admin</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn btn-ghost btn-sm" onclick="API.logout()" style="color:#94a3b8">Sign out</button>
+      </div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+          <h2>Dashboard</h2>
+        </div>
+        <div class="topbar-actions">
+          <div class="user-chip" id="userChip"></div>
+        </div>
+      </header>
+      <div class="content">
+        <div class="stats-grid" id="statsGrid">
+          <div class="loading">Loading stats…</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem" class="dash-cols">
+          <div class="card">
+            <div class="card-title">Recent tasks</div>
+            <div id="recentTasks" class="loading">Loading…</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Latest announcements</div>
+            <div id="recentAnn" class="loading">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/config.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error("auth");
+    (async () => {
+      const user = await loadCurrentUser();
+      if (user?.role === "admin") {
+        document.getElementById("navAdmin").style.display = "flex";
+      }
+      try {
+        const s = await API.get("/api/dashboard/stats");
+        document.getElementById("statsGrid").innerHTML = `
+          <div class="stat-card"><div class="label">Users</div><div class="value">${s.total_users}</div></div>
+          <div class="stat-card"><div class="label">Employees</div><div class="value">${s.total_employees}</div></div>
+          <div class="stat-card"><div class="label">Managers</div><div class="value">${s.total_managers}</div></div>
+          <div class="stat-card accent"><div class="label">Tasks</div><div class="value">${s.total_tasks}</div></div>
+          <div class="stat-card"><div class="label">Open</div><div class="value">${s.open_tasks}</div></div>
+          <div class="stat-card success"><div class="label">Completed</div><div class="value">${s.completed_tasks}</div></div>
+          <div class="stat-card danger"><div class="label">Overdue</div><div class="value">${s.overdue_tasks}</div></div>
+          <div class="stat-card"><div class="label">Projects</div><div class="value">${s.total_projects}</div></div>
+          <div class="stat-card accent"><div class="label">Active projects</div><div class="value">${s.active_projects}</div></div>
+        `;
+        const tasksEl = document.getElementById("recentTasks");
+        if (!s.recent_tasks?.length) {
+          tasksEl.innerHTML = '<div class="empty-state">No tasks yet</div>';
+        } else {
+          tasksEl.innerHTML = `<table class="data"><thead><tr><th>Title</th><th>Status</th><th>Due</th></tr></thead><tbody>
+            ${s.recent_tasks.map(t => `<tr>
+              <td>${t.title}</td>
+              <td>${statusBadge(t.status)}</td>
+              <td>${formatDate(t.due_date)}</td>
+            </tr>`).join("")}
+          </tbody></table>`;
+        }
+        const annEl = document.getElementById("recentAnn");
+        if (!s.recent_announcements?.length) {
+          annEl.innerHTML = '<div class="empty-state">No announcements</div>';
+        } else {
+          annEl.innerHTML = s.recent_announcements.map(a => `
+            <div style="margin-bottom:0.85rem;padding-bottom:0.85rem;border-bottom:1px solid var(--gray-100)">
+              <strong>${a.title}</strong>
+              <div style="font-size:0.85rem;color:var(--gray-500);margin-top:0.2rem">${formatDateTime(a.created_at)}</div>
+            </div>
+          `).join("");
+        }
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    })();
+  </script>
+  <style>
+    @media (max-width: 800px) {
+      .dash-cols { grid-template-columns: 1fr !important; }
+    }
+  </style>
+</body>
+</html>
